@@ -20,9 +20,10 @@ public class Chunk : MonoBehaviour
 
         float3 worldPos = transform.position;
 
-        Func<float3, bool> newFunc = (float3 pos) =>
+        Func<float3, float> newFunc = (float3 pos) =>
         {
-            return (Perlin.Noise((pos + worldPos)/25) > 0);
+            pos = pos + worldPos;
+            return Perlin.Noise((pos)/25);
         };
 
 

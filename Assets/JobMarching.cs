@@ -17,7 +17,7 @@ namespace MarchingCubes
         /// <summary>
         /// This stores all the check functions for marching jobs while the job is happening.
         /// </summary>
-        private static List<Func<float3, bool>> checkFunctions;
+        private static List<Func<float3, float>> checkFunctions;
 
         /// <summary>
         /// Base version of marching cubes with no added features or accurate intersections.
@@ -61,9 +61,9 @@ namespace MarchingCubes
 
 
         public static IEnumerator GetMesh(Vector3 pos, int dimension, float cubeSize, 
-                                            Func<float3, bool> checkFunc, float epsilon, int maxIter, Action<Tuple<Vector3[], int[]>> action)
+                                            Func<float3, float> checkFunc, float epsilon, int maxIter, Action<Tuple<Vector3[], int[]>> action)
         {
-            if (checkFunctions == null) checkFunctions = new List<Func<float3, bool>>();
+            if (checkFunctions == null) checkFunctions = new List<Func<float3, float>>();
             checkFunctions.Add(checkFunc);
             MarchingCubes marchingJob = new MarchingCubes(pos, new int[1], dimension, cubeSize, epsilon, maxIter, checkFunctions.Count - 1);
             JobHandle job = marchingJob.Schedule(dimension * dimension * dimension, 64);
@@ -192,7 +192,7 @@ namespace MarchingCubes
                             else
                             {
                                 var newCoord = new float3(cubeSize * (coord.x + x), cubeSize * (coord.y + y), cubeSize * (coord.z + z));
-                                cellVal |= (checkFunctions[funcNum].Invoke(newCoord)) ? 0x1 : 0;
+                                cellVal |= (checkFunctions[funcNum].Invoke(newCoord) > 0) ? 0x1 : 0;
                             }
                             if (x == 0 && y == 0 && z == 0) continue;
                             cellVal = (cellVal << 1);
@@ -219,8 +219,8 @@ namespace MarchingCubes
                     var edge1 = vertexList[i] & 0x7;
                     var edge2 = (vertexList[i] >> 4) & 0x7;
 
-                    float3 edge1vec = new float3(coord.x + ((edge1 >> 0) & 1), coord.y + ((edge1 >> 1) & 1), coord.z + ((edge1 >> 2) & 1));
-                    float3 edge2vec = new float3(coord.x + ((edge2 >> 0) & 1), coord.y + ((edge2 >> 1) & 1), coord.z + ((edge2 >> 2) & 1));
+                    float3 edge1vec = new float3(coord.x + ((edge1 >> 0) & 1), coord.y + ((edge1 >> 1) & 1), coord.z + ((edge1 >> 2) & 1)) * cubeSize;
+                    float3 edge2vec = new float3(coord.x + ((edge2 >> 0) & 1), coord.y + ((edge2 >> 1) & 1), coord.z + ((edge2 >> 2) & 1)) * cubeSize;
 
                     float3 midVec = (edge2vec + edge1vec)/ 2;
                     
@@ -228,6 +228,16 @@ namespace MarchingCubes
                     {
                         int iter = 0;
                         float delta = float.MaxValue;
+                        
+                        var e1C = checkFunctions[funcNum].Invoke(edge1vec);
+                        var e2C = checkFunctions[funcNum].Invoke(edge2vec);
+                        
+                        if(e1C != e2C)
+                        {
+                            midVec = (-e1C) / (e2C - e1C) * (edge2vec - edge1vec) + edge1vec;
+                        }
+
+                        /*
                         while(delta > epsilon)
                         {
                             if (iter > maxIter) break;
@@ -237,15 +247,15 @@ namespace MarchingCubes
                             var e1C = checkFunctions[funcNum].Invoke(edge1vec);
                             var e2C = checkFunctions[funcNum].Invoke(edge2vec);
                             var mVC = checkFunctions[funcNum].Invoke(midVec);
-                            if (e1C == true && e2C == true && mVC == true) break;
-                            else if(e1C == true && mVC == true)
+                            if (e1C > 0 && e2C > 0 && mVC > 0) break;
+                            else if(e1C > 0 && mVC > 0)
                             {
                                 edge1vec = midVec;
                                 var hold = (edge2vec + edge1vec) / 2;
                                 delta = Mathf.Abs((midVec.x - hold.x) + (midVec.y - hold.y) + (midVec.z - hold.z));
                                 midVec = hold;
                             }
-                            else if (e2C == true && mVC == true)
+                            else if (e2C > 0 && mVC > 0)
                             {
                                 edge2vec = midVec;
                                 var hold = (edge2vec + edge1vec) / 2;
@@ -253,12 +263,13 @@ namespace MarchingCubes
                                 midVec = hold;
                             }
                         }
+                        */
                     }
                     
                     cellInfo[index * 16 + i] = new float3(
-                        cubeSize * (midVec.x),
-                        cubeSize * (midVec.y),
-                        cubeSize * (midVec.z));
+                        (midVec.x),
+                        (midVec.y),
+                        (midVec.z));
                 }
             }
 
